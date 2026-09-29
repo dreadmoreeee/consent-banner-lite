@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="de">
+<head><meta charset="utf-8"><title>custom texts</title><link rel="stylesheet" href="/consent-banner-lite.css"></head>
+<body>
+  <a href="#" id="settings-link" data-consent-settings>Cookies</a>
+  <script src="/consent-banner-lite.js"></script>
+  <script>
+    ConsentBannerLite.init({
+      texts: { de: { title: 'Wir verwenden Cookies', accept: 'Alle akzeptieren' } },
+      categories: ['analytics'],
+      cookieName: 'site_consent',
+      cookieDays: 30
+    });
+  </script>
+</body>
+</html>

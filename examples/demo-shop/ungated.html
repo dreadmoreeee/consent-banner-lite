@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Riverbend Bakery (demo)</title>
+  <link rel="stylesheet" href="shop.css">
+  <link rel="stylesheet" href="../../consent-banner-lite.min.css">
+</head>
+<body>
+  <header><h1>Riverbend Bakery</h1><p>Sourdough, butter tarts and coffee. Counter-example: the tracker is loaded directly, the banner gates nothing.</p></header>
+  <main>
+    <ul class="products">
+      <li><h2>Country sourdough</h2><p>$8.50</p><button type="button">Add to cart</button></li>
+      <li><h2>Butter tarts (6)</h2><p>$12.00</p><button type="button">Add to cart</button></li>
+      <li><h2>Maple scone</h2><p>$3.75</p><button type="button">Add to cart</button></li>
+    </ul>
+    <section id="privacy">
+      <h2>Privacy</h2>
+      <p>This demo loads a fake analytics tag from a second local origin, as soon as the page opens, whatever you choose.</p>
+    </section>
+  </main>
+  <footer><a href="#" data-consent-settings></a></footer>
+
+  <!-- WRONG on purpose: a plain script tag loads before any choice. -->
+  <script src="{{TRACKER}}/tracker.js"></script>
+
+  <script src="../../consent-banner-lite.min.js"></script>
+  <script>
+    ConsentBannerLite.init({
+      version: '2026-09',
+      policyUrl: '#privacy',
+      categories: ['analytics'],
+      trackerCookies: { analytics: ['_da_*'] }
+    });
+  </script>
+</body>
+</html>

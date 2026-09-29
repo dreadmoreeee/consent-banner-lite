@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>consent-banner-lite test page</title>
+  <link rel="stylesheet" href="/consent-banner-lite.css">
+  <script>
+    var q = new URLSearchParams(location.search);
+    if (q.get('htmllang')) document.documentElement.lang = q.get('htmllang');
+    window.ran = { analytics: 0, marketing: 0, preferences: 0, combo: 0 };
+    window.gtagCalls = [];
+    if (q.get('gtag')) {
+      window.dataLayer = [];
+      window.gtag = function () { gtagCalls.push(JSON.parse(JSON.stringify(Array.prototype.slice.call(arguments)))); };
+    }
+    document.write('<script src="/consent-banner-lite' + (q.get('min') ? '.min' : '') + '.js"><\/script>');
+  </script>
+</head>
+<body>
+  <button type="button" id="before">Before</button>
+  <a href="#" id="settings-link" data-consent-settings></a>
+  <script type="text/plain" data-consent="analytics" src="{{TRACKER}}/tracker.js"></script>
+  <script type="text/plain" data-consent="analytics">ran.analytics++;</script>
+  <script type="text/plain" data-consent="marketing">ran.marketing++;</script>
+  <script type="text/plain" data-consent="preferences">ran.preferences++;</script>
+  <script type="text/plain" data-consent="analytics marketing">ran.combo++;</script>
+  <iframe title="embed" data-consent="marketing" data-src="/tests/pages/embed.html"></iframe>
+  <button type="button" id="after">After</button>
+  <script>
+    var opts = { version: q.get('v') || '1', policyUrl: '/privacy', trackerCookies: { analytics: ['_da_*'] } };
+    if (q.get('lang')) opts.lang = q.get('lang');
+    if (q.get('noreload')) opts.reloadOnRevoke = false;
+    ConsentBannerLite.init(opts);
+    window.changes = [];
+    ConsentBannerLite.onChange(function (c) { changes.push(c); });
+  </script>
+</body>
+</html>

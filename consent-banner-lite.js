@@ -1,0 +1,594 @@
+/*! consent-banner-lite 1.0.0 | MIT License | (c) 2026 Marvin Palencia */
+(function (window, document) {
+  'use strict';
+
+  var CATS = ['analytics', 'marketing', 'preferences'];
+
+  // Built-in texts. Add or override languages with the `texts` option.
+  var TEXTS = {
+    en: {
+      title: 'We use cookies',
+      desc: 'We use necessary cookies to make this site work. With your permission, we also use analytics, marketing and preference cookies. You can accept all, reject all or choose by category, and change your mind at any time.',
+      accept: 'Accept all',
+      reject: 'Reject all',
+      settings: 'Settings',
+      save: 'Save choices',
+      policy: 'Privacy policy',
+      link: 'Cookie settings',
+      always: 'Always on',
+      necessary: 'Necessary',
+      necessaryDesc: 'Needed for the site to work: security, cart, and remembering this choice.',
+      analytics: 'Analytics',
+      analyticsDesc: 'Helps us understand how the site is used.',
+      marketing: 'Marketing',
+      marketingDesc: 'Used to show and measure ads.',
+      preferences: 'Preferences',
+      preferencesDesc: 'Remembers settings such as language or region.'
+    },
+    fr: {
+      title: 'Nous utilisons des t\u00e9moins (cookies)',
+      desc: 'Nous utilisons des t\u00e9moins n\u00e9cessaires au fonctionnement du site. Avec votre permission, nous utilisons aussi des t\u00e9moins d\u2019analyse, de marketing et de pr\u00e9f\u00e9rences. Vous pouvez tout accepter, tout refuser ou choisir par cat\u00e9gorie, et changer d\u2019avis en tout temps.',
+      accept: 'Tout accepter',
+      reject: 'Tout refuser',
+      settings: 'Param\u00e8tres',
+      save: 'Enregistrer mes choix',
+      policy: 'Politique de confidentialit\u00e9',
+      link: 'Param\u00e8tres des t\u00e9moins',
+      always: 'Toujours actifs',
+      necessary: 'N\u00e9cessaires',
+      necessaryDesc: 'Requis pour le fonctionnement du site : s\u00e9curit\u00e9, panier et m\u00e9morisation de ce choix.',
+      analytics: 'Analyse',
+      analyticsDesc: 'Nous aide \u00e0 comprendre l\u2019utilisation du site.',
+      marketing: 'Marketing',
+      marketingDesc: 'Sert \u00e0 afficher et \u00e0 mesurer des publicit\u00e9s.',
+      preferences: 'Pr\u00e9f\u00e9rences',
+      preferencesDesc: 'M\u00e9morise des r\u00e9glages comme la langue ou la r\u00e9gion.'
+    },
+    es: {
+      title: 'Usamos cookies',
+      desc: 'Usamos cookies necesarias para que el sitio funcione. Con su permiso, tambi\u00e9n usamos cookies de an\u00e1lisis, marketing y preferencias. Puede aceptar todo, rechazar todo o elegir por categor\u00eda, y cambiar de opini\u00f3n en cualquier momento.',
+      accept: 'Aceptar todo',
+      reject: 'Rechazar todo',
+      settings: 'Configuraci\u00f3n',
+      save: 'Guardar selecci\u00f3n',
+      policy: 'Pol\u00edtica de privacidad',
+      link: 'Configuraci\u00f3n de cookies',
+      always: 'Siempre activas',
+      necessary: 'Necesarias',
+      necessaryDesc: 'Imprescindibles para que el sitio funcione: seguridad, carrito y recordar esta elecci\u00f3n.',
+      analytics: 'An\u00e1lisis',
+      analyticsDesc: 'Nos ayuda a entender c\u00f3mo se usa el sitio.',
+      marketing: 'Marketing',
+      marketingDesc: 'Se usan para mostrar y medir anuncios.',
+      preferences: 'Preferencias',
+      preferencesDesc: 'Recuerdan ajustes como el idioma o la regi\u00f3n.'
+    }
+  };
+
+  // First-party cookies (and localStorage keys) removed while a category is
+  // not granted. A trailing * matches any suffix.
+  var TRACKER_COOKIES = {
+    analytics: ['_ga', '_ga_*', '_gid', '_gat*', '_hj*', '_clck', '_clsk', '_pk_*', 'ajs_*', 'mp_*'],
+    marketing: ['_fbp', '_fbc', '_gcl_*', '_ttp', '_uetsid', '_uetvid', '_pin_unauth', '_scid*', 'li_fat_id'],
+    preferences: []
+  };
+
+  var cfg = null;
+  var state = null;
+  var lang = 'en';
+  var patterns = {};
+  var root = null;
+  var lastFocus = null;
+  var listeners = [];
+  var activated = {};
+
+  function has(o, k) {
+    return Object.prototype.hasOwnProperty.call(o, k);
+  }
+
+  function extend(a, b) {
+    for (var k in b) {
+      if (has(b, k) && b[k] !== undefined) {
+        a[k] = b[k];
+      }
+    }
+    return a;
+  }
+
+  function esc(s) {
+    return String(s).split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;').split('"').join('&quot;');
+  }
+
+  // --- cookies ---------------------------------------------------------------
+
+  function cookieNames() {
+    var out = [];
+    var parts = document.cookie ? document.cookie.split(';') : [];
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i].trim();
+      var eq = p.indexOf('=');
+      out.push([eq < 0 ? p : p.slice(0, eq), eq < 0 ? '' : p.slice(eq + 1)]);
+    }
+    return out;
+  }
+
+  function readCookie(name) {
+    var all = cookieNames();
+    for (var i = 0; i < all.length; i++) {
+      if (all[i][0] === name) {
+        try {
+          return decodeURIComponent(all[i][1]);
+        } catch (e) {
+          return null;
+        }
+      }
+    }
+    return null;
+  }
+
+  function writeCookie(value, maxAge) {
+    var c = cfg.cookieName + '=' + encodeURIComponent(value) + '; path=/; SameSite=Lax; max-age=' + maxAge;
+    if (cfg.cookieDomain) {
+      c += '; domain=' + cfg.cookieDomain;
+    }
+    if (location.protocol === 'https:') {
+      c += '; Secure';
+    }
+    document.cookie = c;
+  }
+
+  function expire(name, domain) {
+    document.cookie = name + '=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT' + (domain ? '; domain=' + domain : '');
+  }
+
+  function matches(name, list) {
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i];
+      if (p.charAt(p.length - 1) === '*' ? name.indexOf(p.slice(0, -1)) === 0 : name === p) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Delete matching cookies on this host and each parent domain, and matching
+  // localStorage keys. Cookies of other domains cannot be reached from here.
+  function removeTrackers(list) {
+    if (!list || !list.length) {
+      return;
+    }
+    var labels = location.hostname.split('.');
+    var all = cookieNames();
+    for (var i = 0; i < all.length; i++) {
+      if (!matches(all[i][0], list)) {
+        continue;
+      }
+      expire(all[i][0], '');
+      for (var j = 0; j < labels.length; j++) {
+        var d = labels.slice(j).join('.');
+        expire(all[i][0], d);
+        expire(all[i][0], '.' + d);
+      }
+    }
+    try {
+      for (var k = window.localStorage.length - 1; k >= 0; k--) {
+        var key = window.localStorage.key(k);
+        if (key && matches(key, list)) {
+          window.localStorage.removeItem(key);
+        }
+      }
+    } catch (e) {
+      // storage blocked: nothing to clean
+    }
+  }
+
+  function cleanup() {
+    for (var i = 0; i < CATS.length; i++) {
+      if (!state || !state[CATS[i]]) {
+        removeTrackers(patterns[CATS[i]]);
+      }
+    }
+  }
+
+  // --- state -----------------------------------------------------------------
+
+  function make(c, t) {
+    var s = { necessary: true, version: String(cfg.version), timestamp: t || Date.now() };
+    for (var i = 0; i < CATS.length; i++) {
+      s[CATS[i]] = !!(c && c[CATS[i]] && cfg.categories.indexOf(CATS[i]) >= 0);
+    }
+    return s;
+  }
+
+  function copy(s) {
+    return s ? extend({}, s) : null;
+  }
+
+  function load() {
+    var raw = readCookie(cfg.cookieName);
+    var d = null;
+    if (!raw) {
+      return null;
+    }
+    try {
+      d = JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+    if (!d || !d.c || String(d.v) !== String(cfg.version)) {
+      return null;
+    }
+    return make(d.c, d.t);
+  }
+
+  function all(value) {
+    var c = {};
+    for (var i = 0; i < CATS.length; i++) {
+      c[CATS[i]] = value;
+    }
+    return c;
+  }
+
+  function save(c) {
+    var prev = state;
+    var stored = {};
+    var revoked = false;
+    state = make(c);
+    for (var i = 0; i < CATS.length; i++) {
+      stored[CATS[i]] = state[CATS[i]] ? 1 : 0;
+      if (prev && prev[CATS[i]] && !state[CATS[i]] && activated[CATS[i]]) {
+        revoked = true;
+      }
+    }
+    writeCookie(JSON.stringify({ v: state.version, c: stored, t: state.timestamp }), Math.round(cfg.cookieDays * 86400));
+    consentMode('update');
+    apply();
+    hide();
+    notify();
+    if (revoked && cfg.reloadOnRevoke) {
+      location.reload();
+    }
+  }
+
+  function notify() {
+    for (var i = 0; i < listeners.length; i++) {
+      try {
+        listeners[i](copy(state));
+      } catch (e) {
+        // a broken listener must not stop the others
+      }
+    }
+    try {
+      document.dispatchEvent(new CustomEvent('consentbannerlite:change', { detail: copy(state) }));
+    } catch (e) {
+      // very old browsers: listeners above still ran
+    }
+  }
+
+  // --- Google Consent Mode v2 -------------------------------------------------
+
+  function consentMode(kind) {
+    if (!cfg.consentMode || typeof window.gtag !== 'function') {
+      return;
+    }
+    var s = state || {};
+    var g = function (b) {
+      return b ? 'granted' : 'denied';
+    };
+    var m = {
+      ad_storage: g(s.marketing),
+      ad_user_data: g(s.marketing),
+      ad_personalization: g(s.marketing),
+      analytics_storage: g(s.analytics),
+      functionality_storage: g(s.preferences),
+      personalization_storage: g(s.preferences),
+      security_storage: 'granted'
+    };
+    if (kind === 'default' && !state && cfg.waitForUpdate) {
+      m.wait_for_update = cfg.waitForUpdate;
+    }
+    window.gtag('consent', kind, m);
+  }
+
+  // --- blocked scripts and embeds --------------------------------------------
+
+  function allowed(value) {
+    var list = String(value).split(',').join(' ').split(' ');
+    var any = false;
+    for (var i = 0; i < list.length; i++) {
+      if (!list[i]) {
+        continue;
+      }
+      any = true;
+      if (list[i] !== 'necessary' && !(state && state[list[i]])) {
+        return false;
+      }
+    }
+    return any;
+  }
+
+  function mark(value) {
+    var list = String(value).split(',').join(' ').split(' ');
+    for (var i = 0; i < list.length; i++) {
+      activated[list[i]] = true;
+    }
+  }
+
+  function activate(el) {
+    var s = document.createElement('script');
+    var attrs = el.attributes;
+    for (var i = 0; i < attrs.length; i++) {
+      var n = attrs[i].name;
+      if (n !== 'type' && n !== 'data-consent' && n !== 'data-type') {
+        s.setAttribute(n, attrs[i].value);
+      }
+    }
+    if (el.getAttribute('data-type')) {
+      s.type = el.getAttribute('data-type');
+    }
+    if (el.nonce) {
+      s.nonce = el.nonce;
+    }
+    if (el.hasAttribute('src')) {
+      s.async = el.hasAttribute('async');
+    } else {
+      s.text = el.text;
+    }
+    el.parentNode.replaceChild(s, el);
+  }
+
+  function apply() {
+    var els = document.querySelectorAll('[data-consent]');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      var v = el.getAttribute('data-consent');
+      if (!allowed(v)) {
+        continue;
+      }
+      if (el.tagName === 'SCRIPT') {
+        if (el.type === 'text/plain') {
+          mark(v);
+          activate(el);
+        }
+      } else if (el.hasAttribute('data-src')) {
+        mark(v);
+        el.setAttribute('src', el.getAttribute('data-src'));
+        el.removeAttribute('data-src');
+      }
+    }
+    cleanup();
+  }
+
+  // --- banner ----------------------------------------------------------------
+
+  function build() {
+    var t = TEXTS[lang];
+    var h = '<div class="cbl__inner"><h2 class="cbl__title" id="cbl-title">' + esc(t.title) + '</h2>' +
+      '<p class="cbl__desc" id="cbl-desc">' + esc(t.desc) +
+      (cfg.policyUrl ? ' <a class="cbl__link" href="' + esc(cfg.policyUrl) + '">' + esc(t.policy) + '</a>' : '') + '</p>' +
+      '<div class="cbl__prefs" id="cbl-prefs" hidden><ul class="cbl__cats">' +
+      '<li class="cbl__cat"><input type="checkbox" id="cbl-c-necessary" checked disabled>' +
+      '<label for="cbl-c-necessary"><strong>' + esc(t.necessary) + '</strong> <em>(' + esc(t.always) + ')</em><br><span>' + esc(t.necessaryDesc) + '</span></label></li>';
+    for (var i = 0; i < CATS.length; i++) {
+      var c = CATS[i];
+      if (cfg.categories.indexOf(c) < 0) {
+        continue;
+      }
+      h += '<li class="cbl__cat"><input type="checkbox" id="cbl-c-' + c + '" data-cat="' + c + '">' +
+        '<label for="cbl-c-' + c + '"><strong>' + esc(t[c]) + '</strong><br><span>' + esc(t[c + 'Desc']) + '</span></label></li>';
+    }
+    h += '</ul></div><div class="cbl__btns">' +
+      '<button type="button" class="cbl__btn" data-cbl="accept">' + esc(t.accept) + '</button>' +
+      '<button type="button" class="cbl__btn" data-cbl="reject">' + esc(t.reject) + '</button>' +
+      '<button type="button" class="cbl__btn" data-cbl="settings" aria-expanded="false" aria-controls="cbl-prefs">' + esc(t.settings) + '</button>' +
+      '<button type="button" class="cbl__btn" data-cbl="save" hidden>' + esc(t.save) + '</button>' +
+      '</div></div>';
+
+    root = document.createElement('div');
+    root.className = 'cbl';
+    root.id = 'cbl-consent';
+    root.hidden = true;
+    root.setAttribute('role', 'dialog');
+    root.setAttribute('aria-modal', 'false');
+    root.setAttribute('aria-labelledby', 'cbl-title');
+    root.setAttribute('aria-describedby', 'cbl-desc');
+    root.setAttribute('tabindex', '-1');
+    root.setAttribute('lang', lang);
+    root.innerHTML = h;
+    root.addEventListener('click', onClick);
+    root.addEventListener('keydown', function (e) {
+      if ((e.key === 'Escape' || e.key === 'Esc') && prefsOpen()) {
+        e.preventDefault();
+        togglePrefs(false);
+        btn('settings').focus();
+      }
+    });
+    // First in the DOM so screen readers and keyboard users meet it first.
+    document.body.insertBefore(root, document.body.firstChild);
+  }
+
+  function btn(name) {
+    return root.querySelector('[data-cbl="' + name + '"]');
+  }
+
+  function prefsOpen() {
+    return !root.querySelector('#cbl-prefs').hidden;
+  }
+
+  function togglePrefs(open) {
+    root.querySelector('#cbl-prefs').hidden = !open;
+    btn('save').hidden = !open;
+    btn('settings').setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  function onClick(e) {
+    var b = e.target.closest ? e.target.closest('[data-cbl]') : null;
+    if (!b) {
+      return;
+    }
+    var a = b.getAttribute('data-cbl');
+    if (a === 'accept') {
+      save(all(true));
+    } else if (a === 'reject') {
+      save(all(false));
+    } else if (a === 'settings') {
+      togglePrefs(!prefsOpen());
+    } else if (a === 'save') {
+      var c = {};
+      var boxes = root.querySelectorAll('[data-cat]');
+      for (var i = 0; i < boxes.length; i++) {
+        c[boxes[i].getAttribute('data-cat')] = boxes[i].checked;
+      }
+      save(c);
+    }
+  }
+
+  function show(withPrefs) {
+    if (!root) {
+      build();
+    }
+    var boxes = root.querySelectorAll('[data-cat]');
+    for (var i = 0; i < boxes.length; i++) {
+      boxes[i].checked = !!(state && state[boxes[i].getAttribute('data-cat')]);
+    }
+    togglePrefs(!!withPrefs);
+    if (root.hidden) {
+      lastFocus = document.activeElement;
+      root.hidden = false;
+    }
+    root.focus();
+  }
+
+  function hide() {
+    if (!root || root.hidden) {
+      return;
+    }
+    var inside = root.contains(document.activeElement);
+    root.hidden = true;
+    if (inside && lastFocus && lastFocus !== document.body && lastFocus.focus && document.documentElement.contains(lastFocus)) {
+      lastFocus.focus();
+    }
+    lastFocus = null;
+  }
+
+  // "Cookie settings" links: any element with data-consent-settings.
+  function onDocClick(e) {
+    var a = e.target.closest ? e.target.closest('[data-consent-settings]') : null;
+    if (a) {
+      e.preventDefault();
+      open();
+    }
+  }
+
+  function fillLinks() {
+    var links = document.querySelectorAll('[data-consent-settings]');
+    for (var i = 0; i < links.length; i++) {
+      if (!links[i].textContent.trim()) {
+        links[i].textContent = TEXTS[lang].link;
+      }
+    }
+  }
+
+  function start() {
+    apply();
+    fillLinks();
+    document.addEventListener('click', onDocClick);
+    if (!state) {
+      show(false);
+    }
+  }
+
+  // --- public API ------------------------------------------------------------
+
+  function init(options) {
+    if (cfg) {
+      return api;
+    }
+    cfg = extend({
+      version: '1',
+      cookieName: 'cbl_consent',
+      cookieDays: 180,
+      cookieDomain: '',
+      lang: '',
+      texts: null,
+      categories: CATS.slice(),
+      policyUrl: '',
+      consentMode: true,
+      waitForUpdate: 500,
+      reloadOnRevoke: true,
+      trackerCookies: null
+    }, options || {});
+    var extra = cfg.texts || {};
+    for (var k in extra) {
+      if (has(extra, k)) {
+        TEXTS[k] = extend(extend({}, TEXTS[k] || TEXTS.en), extra[k]);
+      }
+    }
+    var l = String(cfg.lang || document.documentElement.getAttribute('lang') || 'en').toLowerCase();
+    lang = TEXTS[l] ? l : (TEXTS[l.slice(0, 2)] ? l.slice(0, 2) : 'en');
+    for (var i = 0; i < CATS.length; i++) {
+      patterns[CATS[i]] = TRACKER_COOKIES[CATS[i]].concat((cfg.trackerCookies && cfg.trackerCookies[CATS[i]]) || []);
+    }
+    state = load();
+    consentMode('default');
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', start);
+    } else {
+      start();
+    }
+    return api;
+  }
+
+  function open() {
+    if (cfg && document.body) {
+      show(true);
+    }
+  }
+
+  function reset() {
+    if (!cfg) {
+      return;
+    }
+    writeCookie('', 0);
+    state = null;
+    consentMode('update');
+    cleanup();
+    show(false);
+  }
+
+  var api = {
+    version: '1.0.0',
+    init: init,
+    open: open,
+    reset: reset,
+    getConsent: function () {
+      return copy(state);
+    },
+    onChange: function (cb) {
+      listeners.push(cb);
+      return function () {
+        var i = listeners.indexOf(cb);
+        if (i >= 0) {
+          listeners.splice(i, 1);
+        }
+      };
+    },
+    acceptAll: function () {
+      if (cfg) {
+        save(all(true));
+      }
+    },
+    rejectAll: function () {
+      if (cfg) {
+        save(all(false));
+      }
+    },
+    set: function (c) {
+      if (cfg) {
+        save(c || {});
+      }
+    }
+  };
+
+  window.ConsentBannerLite = api;
+})(window, document);
